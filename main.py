@@ -68,6 +68,10 @@ def streamreaderthread():
 #Consumer Thread: Pulls the latest frames from the Queue and runs Yolo Inference
 def inferenceworkerthread():
     global currentframebytes, isrecording, posteventcounter, videowriter
+
+    consecutivehits=0
+    requiredhits=2
+    
     while True:
         try:
             frame=rawframequeue.get(timeout=1.0)    #get the frame from the queue
@@ -75,15 +79,26 @@ def inferenceworkerthread():
             continue
 
         #YOLO Proccessing here
-        result=model(frame,classes=[0], verbose=False)      #classes=[0] targets persons only, verbose=False suppresses thinking logs
+        result=model(frame,classes=[76], conf=0.20, verbose=False)      #classes=[0] targets persons only, verbose=False suppresses thinking logs
         labelledframe=result[0].plot()
 
         framebuffer.append(labelledframe)           #continuosly push the frame into the frame buffer inorder to roll pre-event clips
 
         boxes=result[0].boxes                   #check if there is any event happening
+        for box in result[0].boxes:
+            classid=int(box.cls[0])
+            confidence=float(box.conf[0])
+            classname=model.names[classid]
+            print(f"Detected: {classname} ({classid}) with {confidence:.2f} confidence")
+
+        
+        if len(boxes)>0:
+            consecutivehits=consecutivehits+1
+        else:
+            consecutivehits=0
 
         #if any event is happening and if its not already recording then, save pre event clips
-        if len(boxes)>0  and not isrecording:
+        if consecutivehits>=requiredhits  and not isrecording:
             print("Incident Detected- Stitching up and saving the clips")
             isrecording=True
             posteventcounter=0
