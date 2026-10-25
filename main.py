@@ -58,7 +58,7 @@ def capturestreamthread():
 
                 timestamp=datetime.datetime.now().strftime("%Y%m%d_%H%M%S")         #set timestamp in the video recording
                 filename=f"incident_{timestamp}.mp4"
-                fourcc=cv2.VideoWriter_fourcc(*'mpv4')          #fourcc is an indentifier which tells the system which compression algorithm to apply
+                fourcc=cv2.VideoWriter_fourcc(*'mp4v')          #fourcc is an indentifier which tells the system which compression algorithm to apply
                 height,width,_=labelledframe.shape              #set video height and width same as labelled video height and width
                 videowriter=cv2.VideoWriter(filename,fourcc,30.0,(width,height))    #declaring parameters of videowriter- where to save, how to save etc
 
