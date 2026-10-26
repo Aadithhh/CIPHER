@@ -24,8 +24,8 @@ app.add_middleware(
 cameraurl="http://127.0.0.1:5000/"      #url of the live stream. code from camsimulation.py
 currentframebytes=None
 
-preeventframes=90
-posteventframes=90
+preeventframes=int(8 * 15.0)      #seconds * target FPS
+posteventframes=int(8 * 15.0)      #seconds * target FPS
 framebuffer=deque(maxlen=preeventframes)
 isrecording=False
 posteventcounter=0
@@ -115,7 +115,7 @@ def inferenceworkerthread():
 
             fourcc=cv2.VideoWriter_fourcc(*'mp4v')          #fourcc is an indentifier which tells the system which compression algorithm to apply
             height,width,_=labelledframe.shape              #set video height and width same as labelled video height and width
-            videowriter=cv2.VideoWriter(activeincidentpath,fourcc,30.0,(width,height))    #declaring parameters of videowriter- where to save, how to save etc
+            videowriter=cv2.VideoWriter(activeincidentpath, fourcc, 15.0, (width,height))    #declaring parameters of videowriter- where to save, how to save etc
 
             #dump already recorded frames into filename as pre-event footage
             for bufferedframe in framebuffer:
