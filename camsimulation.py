@@ -16,7 +16,7 @@ def generateframes():
 
         '''frame=cv2.resize(frame,(640,480))'''   #resizing to mimic ESP32-CAM
         encodeparameters=[int(cv2.IMWRITE_JPEG_QUALITY), 95]
-        ret,buffer=cv2.imencode('.jpg',encodeparameters)
+        ret,buffer=cv2.imencode('.jpg',frame ,encodeparameters)
         framebytes=buffer.tobytes()
 
         yield (b'--frame\r\n'
