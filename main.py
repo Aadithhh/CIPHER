@@ -31,7 +31,7 @@ videowriter=None
 
 rawframequeue=queue.Queue(maxsize=1)
 
-model=YOLO("yolov8n.pt")    #initializing model
+model=YOLO("yolov8s.pt")    #initializing model
 
 #Producer Thread: Pulls frames from the camera and places them onto the queue
 def streamreaderthread():
@@ -79,7 +79,7 @@ def inferenceworkerthread():
             continue
 
         #YOLO Proccessing here
-        result=model(frame,classes=[76], conf=0.20, verbose=False)      #classes=[0] targets persons only, verbose=False suppresses thinking logs
+        result=model(frame,classes=[76], conf=0.20, imgsz=1280, device='cuda', verbose=False)      #classes=[0] targets persons only, verbose=False suppresses thinking logs
         labelledframe=result[0].plot()
 
         framebuffer.append(labelledframe)           #continuosly push the frame into the frame buffer inorder to roll pre-event clips
