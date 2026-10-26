@@ -4,6 +4,7 @@ import threading
 import time
 import datetime
 import queue
+import os
 from collections import deque
 from fastapi.responses import FileResponse
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
@@ -29,6 +30,10 @@ framebuffer=deque(maxlen=preeventframes)
 isrecording=False
 posteventcounter=0
 videowriter=None
+activeincidentpath=None
+
+#for incident clips storage
+os.makedirs("incidents", exist_ok=True)
 
 rawframequeue=queue.Queue(maxsize=1)
 
@@ -69,7 +74,7 @@ def streamreaderthread():
 
 #Consumer Thread: Pulls the latest frames from the Queue and runs Yolo Inference
 def inferenceworkerthread():
-    global currentframebytes, isrecording, posteventcounter, videowriter
+    global currentframebytes, isrecording, posteventcounter, videowriter, activeincidentpath
 
     consecutivehits=0
     requiredhits=2
@@ -81,7 +86,7 @@ def inferenceworkerthread():
             continue
 
         #YOLO Proccessing here
-        result=model(frame, conf=0.40, imgsz=960, verbose=False)      #classes=[0] targets persons only, verbose=False suppresses thinking logs
+        result=model(frame, conf=0.40, imgsz=640, verbose=False)      #classes=[0] targets persons only, verbose=False suppresses thinking logs
         labelledframe=result[0].plot()
 
         framebuffer.append(labelledframe)           #continuosly push the frame into the frame buffer inorder to roll pre-event clips
@@ -106,11 +111,11 @@ def inferenceworkerthread():
             posteventcounter=0
 
             timestamp=datetime.datetime.now().strftime("%Y%m%d_%H%M%S")         #set timestamp in the video recording
-            filename=f"incident_{timestamp}.mp4"
+            activeincidentpath=os.path.join("incidents", f"incident_{timestamp}.mp4")
 
             fourcc=cv2.VideoWriter_fourcc(*'mp4v')          #fourcc is an indentifier which tells the system which compression algorithm to apply
             height,width,_=labelledframe.shape              #set video height and width same as labelled video height and width
-            videowriter=cv2.VideoWriter(filename,fourcc,30.0,(width,height))    #declaring parameters of videowriter- where to save, how to save etc
+            videowriter=cv2.VideoWriter(activeincidentpath,fourcc,30.0,(width,height))    #declaring parameters of videowriter- where to save, how to save etc
 
             #dump already recorded frames into filename as pre-event footage
             for bufferedframe in framebuffer:
@@ -125,6 +130,7 @@ def inferenceworkerthread():
             if posteventcounter>=posteventframes:   #when the post event queue is full, stop the recording
                 videowriter.release()
                 isrecording=False
+                consecutivehits=0                   #reset hit counter
                 framebuffer.clear()
                 print("Post Event Recording Compelete")
 
