@@ -9,6 +9,7 @@ from fastapi.responses import FileResponse
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from ultralytics import YOLO
+from huggingface_hub import hf_hub_download
 
 app=FastAPI(title="CIPHER")
 app.add_middleware(
@@ -31,7 +32,8 @@ videowriter=None
 
 rawframequeue=queue.Queue(maxsize=1)
 
-model=YOLO("yolov8s.pt")    #initializing model
+modelpath=hf_hub_download(repo_id="Subh775/Threat-Detection-YOLOv8n", filename="weights/best.pt")
+model=YOLO(modelpath)    #initializing model
 
 #Producer Thread: Pulls frames from the camera and places them onto the queue
 def streamreaderthread():
@@ -79,7 +81,7 @@ def inferenceworkerthread():
             continue
 
         #YOLO Proccessing here
-        result=model(frame,classes=[76], conf=0.20, imgsz=960, verbose=False)      #classes=[0] targets persons only, verbose=False suppresses thinking logs
+        result=model(frame, conf=0.40, imgsz=960, verbose=False)      #classes=[0] targets persons only, verbose=False suppresses thinking logs
         labelledframe=result[0].plot()
 
         framebuffer.append(labelledframe)           #continuosly push the frame into the frame buffer inorder to roll pre-event clips
