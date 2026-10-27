@@ -5,6 +5,7 @@ import time
 import datetime
 import queue
 import os
+import numpy as np
 from collections import deque
 from fastapi.responses import FileResponse
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
@@ -78,18 +79,77 @@ def streamreaderthread():
         except queue.Full:
             pass
 
+#occlusiondetection
+class AdaptiveOcclusionDetector:
+    def __init__(self, calibrationframes: int=60):
+        self.calibrationframes=calibrationframes
+        self.iscalibrated=False
+
+        #Baseline Data Accumulaters(During Warmup)
+        self._collectedstddevs=[]
+        self._collectedlaplacians=[]
+
+        self.baselinestddevs=1.0
+        self.baselinelaplacians=1.0
+
+    def update(self, frame) -> tuple[bool, float, float]:
+        resized=cv2.resize(frame, (320,180))                    #reducing the size of each frames
+        gray=cv2.cvtColor(resized, cv2.COLOR_BGR2GRAY)          #converting frames to grayscale
+
+        _, stddev=cv2.meanStdDev(gray)
+        currentstd=float(stddev[0][0])
+
+        laplacianmatrix=cv2.Laplacian(gray, cv2.CV_64F)
+        currentlap=float(laplacianmatrix.var())
+
+        if not self.iscalibrated:
+            self._collectedstddevs.append(currentstd)
+            self._collectedlaplacians.append(currentlap)
+
+            if len(self._collectedstddevs)>=self.calibrationframes:
+                self.baselinestddevs=max(float(np.mean(self._collectedstddevs)), 1.0)
+                self.baselinelaplacians=max(float(np.mean(self._collectedlaplacians)), 1.0)
+                self.iscalibrated=True
+            return False, 1.0, 1.0
+
+        #calculate the relative difference of current and baseline values
+        contrastratio=currentstd/self.baselinestddevs
+        sharpnessratio=currentlap/self.baselinelaplacians
+
+        isoccluded=(contrastratio<0.25) and (sharpnessratio<0.25)
+
+        if not isoccluded:
+            alpha=0.005
+            self.baselinestddevs=(alpha*currentstd)+((1.0-alpha)*self.baselinestddevs)
+            self.baselinelaplacians=(alpha*currentlap)+((1.0-alpha)*self.baselinelaplacians)
+        return isoccluded,contrastratio,sharpnessratio
+
 #Consumer Thread: Pulls the latest frames from the Queue and runs Yolo Inference
 def inferenceworkerthread():
     global currentframebytes, isrecording, posteventcounter, videowriter, activeincidentpath, timesincelastincident, lastrecordingendtime
 
     consecutivehits=0
     requiredhits=2
+
+    occlusiondetector=AdaptiveOcclusionDetector(calibrationframes=60)
+    occlusioncounter=0
+    occlusiontriggerframes=20
     
     while True:
         try:
             frame=rawframequeue.get(timeout=1.0)    #get the frame from the queue
         except queue.Empty:
             continue
+
+        isoccluded,contrastratio,sharpnessratio=occlusiondetector.update(frame)
+        print(f"Contrast Ratio: {contrastratio}, \t Sharpness Ratio: {sharpnessratio}")
+
+        if occlusiondetector.iscalibrated:
+            if isoccluded:
+                occlusioncounter=occlusioncounter+1
+                print("The CAMERA IS OBSTRUCTED!!!!")
+            else:
+                occlusioncounter=0
 
         #YOLO Proccessing here
         result=model(frame, classes=67, conf=0.60, imgsz=640, verbose=False)      #classes=[0] targets persons only, verbose=False suppresses thinking logs
