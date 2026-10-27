@@ -1,7 +1,8 @@
 import httpx
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, status, Header
 from auth.schemas import LoginRequest, AuthenticationResponse
 from auth.firebaseconfig import webapikey, db
+from firebase_admin import auth
 
 router=APIRouter(prefix="/auth", tags=["Authentication"])
 
@@ -60,3 +61,10 @@ async def login(credentials: LoginRequest):
             role=role,
             message="Authentication successful"
         )
+
+async def verifyuser(authorization: str=Header(...)):
+    try:
+        token=authorization.replace("Bearer", "").strip()
+        return auth.verify_id_token(token)
+    except Exception:
+        raise HTTPException(status_code=401, detail="Unauthorized: Invalid or expired token")
