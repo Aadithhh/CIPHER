@@ -24,21 +24,27 @@ app.add_middleware(
 cameraurl="http://127.0.0.1:5000/"      #url of the live stream. code from camsimulation.py
 currentframebytes=None
 
-preeventframes=int(8 * 15.0)      #seconds * target FPS
-posteventframes=int(8 * 15.0)      #seconds * target FPS
+preeventtime=8
+posteventtime=8
+preeventframes=int(preeventtime * 15.0)      #seconds * target FPS
+posteventframes=int(posteventtime * 15.0)      #seconds * target FPS
 framebuffer=deque(maxlen=preeventframes)
 isrecording=False
 posteventcounter=0
 videowriter=None
+lastrecordingendtime=0.0
 activeincidentpath=None
+cooldowntime=5
 
 #for incident clips storage
 os.makedirs("incidents", exist_ok=True)
 
 rawframequeue=queue.Queue(maxsize=1)
 
-modelpath=hf_hub_download(repo_id="Subh775/Threat-Detection-YOLOv8n", filename="weights/best.pt")
-model=YOLO(modelpath)    #initializing model
+'''modelpath=hf_hub_download(repo_id="Subh775/Threat-Detection-YOLOv8n", filename="weights/best.pt")
+model=YOLO(modelpath)    #initializing model'''
+
+model=YOLO("yolov8s.pt")
 
 #Producer Thread: Pulls frames from the camera and places them onto the queue
 def streamreaderthread():
@@ -74,7 +80,7 @@ def streamreaderthread():
 
 #Consumer Thread: Pulls the latest frames from the Queue and runs Yolo Inference
 def inferenceworkerthread():
-    global currentframebytes, isrecording, posteventcounter, videowriter, activeincidentpath
+    global currentframebytes, isrecording, posteventcounter, videowriter, activeincidentpath, timesincelastincident, lastrecordingendtime
 
     consecutivehits=0
     requiredhits=2
@@ -86,7 +92,7 @@ def inferenceworkerthread():
             continue
 
         #YOLO Proccessing here
-        result=model(frame, conf=0.40, imgsz=640, verbose=False)      #classes=[0] targets persons only, verbose=False suppresses thinking logs
+        result=model(frame, classes=67, conf=0.60, imgsz=640, verbose=False)      #classes=[0] targets persons only, verbose=False suppresses thinking logs
         labelledframe=result[0].plot()
 
         framebuffer.append(labelledframe)           #continuosly push the frame into the frame buffer inorder to roll pre-event clips
@@ -98,14 +104,17 @@ def inferenceworkerthread():
             classname=model.names[classid]
             print(f"Detected: {classname} ({classid}) with {confidence:.2f} confidence")
 
-        
+        hasthreat=len(boxes)>0        
         if len(boxes)>0:
             consecutivehits=consecutivehits+1
         else:
             consecutivehits=0
 
+        currenttime=time.time()
+        timesincelastincident=currenttime-lastrecordingendtime
+
         #if any event is happening and if its not already recording then, save pre event clips
-        if consecutivehits>=requiredhits  and not isrecording:
+        if consecutivehits>=requiredhits  and not isrecording and (timesincelastincident > cooldowntime):
             print("Incident Detected- Stitching up and saving the clips")
             isrecording=True
             posteventcounter=0
@@ -125,14 +134,20 @@ def inferenceworkerthread():
         #for post event clip saving
         if isrecording:
             videowriter.write(labelledframe)
-            posteventcounter+=1
+
+            if hasthreat:
+                posteventcounter=0
+            else:
+                posteventcounter=posteventcounter+1
 
             if posteventcounter>=posteventframes:   #when the post event queue is full, stop the recording
                 videowriter.release()
                 isrecording=False
                 consecutivehits=0                   #reset hit counter
+                lastrecordingendtime=time.time()    
                 framebuffer.clear()
                 print("Post Event Recording Compelete")
+                activeincidentpath=None
 
         #compressing video frames to JPEG Images
         _,buffer=cv2.imencode('.jpg',labelledframe)
