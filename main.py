@@ -13,7 +13,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from ultralytics import YOLO
 from huggingface_hub import hf_hub_download
 
+from auth.authroute import router as authrouter 
+
 app=FastAPI(title="CIPHER")
+
+app.include_router(authrouter)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"], 
