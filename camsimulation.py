@@ -1,26 +1,54 @@
 import cv2
+import threading
+import time
 from flask import Flask, Response
 
 app=Flask(__name__)
-camera=cv2.VideoCapture(0)
+
+
+camera=cv2.VideoCapture(0, cv2.CAP_DSHOW)
 camera.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
 camera.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
-camera.set(cv2.CAP_PROP_FPS, 30)
 
-#read frames from camera, resizes them, and encodes to MJPEG
-def generateframes():
+latestframebytes=None
+lock=threading.Lock()
+
+
+def cameracapturethread():
+    global latestframebytes
+    encodeparameters=[int(cv2.IMWRITE_JPEG_QUALITY), 95]
+
     while True:
         success,frame=camera.read()
         if not success:
-            break
+            time.sleep(0.01)    
+            continue
 
-        '''frame=cv2.resize(frame,(640,480))'''   #resizing to mimic ESP32-CAM
-        encodeparameters=[int(cv2.IMWRITE_JPEG_QUALITY), 95]
         ret,buffer=cv2.imencode('.jpg',frame ,encodeparameters)
-        framebytes=buffer.tobytes()
+        if ret:
+            with lock:
+                latestframebytes=buffer.tobytes()
+        time.sleep(0.03)
 
-        yield (b'--frame\r\n'
-               b'Content-Type: image/jpeg\r\n\r\n' + framebytes + b'\r\n')
+threading.Thread(target=cameracapturethread, daemon=True).start()       #starting the camera capture thread
+        
+#read frames from camera, resizes them, and encodes to MJPEG
+def generateframes():
+    while True:
+        with lock:
+            framebytes=latestframebytes
+
+        if framebytes is None:
+            time.sleep(0.01)
+            continue
+
+        yield (
+            b'--frame\r\n'
+            b'Content-Type: image/jpeg\r\n'
+            b'Content-Length: ' + str(len(framebytes)).encode() + b'\r\n\r\n'
+            + framebytes + b'\r\n'
+        )
+        time.sleep(0.033)
 
 
 @app.route('/')
