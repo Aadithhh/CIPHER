@@ -1,7 +1,7 @@
 import httpx
 from fastapi import APIRouter, HTTPException, status, Header, Depends
-from auth.schemas import LoginRequest, AuthenticationResponse
-from auth.firebaseconfig import webapikey, db
+from backend.auth.schemas import LoginRequest, AuthenticationResponse
+from backend.auth.firebaseconfig import webapikey, db
 from firebase_admin import auth
 
 router=APIRouter(prefix="/auth", tags=["Authentication"])

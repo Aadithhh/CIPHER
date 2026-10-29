@@ -13,9 +13,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from ultralytics import YOLO
 from huggingface_hub import hf_hub_download
 
-from auth.authroute import router as authrouter 
-from client.clientroute import router as clientrouter
-from admin.adminroute import router as adminrouter
+from backend.auth.authroute import router as authrouter 
+from backend.client.clientroute import router as clientrouter
+from backend.admin.adminroute import router as adminrouter
 
 app=FastAPI(title="CIPHER")
 
