@@ -13,9 +13,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from ultralytics import YOLO
 from huggingface_hub import hf_hub_download
 
-from backend.auth.authroute import router as authrouter 
-from backend.client.clientroute import router as clientrouter
-from backend.admin.adminroute import router as adminrouter
+from auth.authroute import router as authrouter 
+from client.clientroute import router as clientrouter
+from admin.adminroute import router as adminrouter
 
 app=FastAPI(title="CIPHER")
 
@@ -59,6 +59,46 @@ model=YOLO(modelpath)    #initializing model'''
 
 model=YOLO("yolov8s.pt")
 
+class ContinuousRecorder:
+    def __init__(self, outputdirectory: str="recordings/", segmentduration: int=120, fps: float=30.0):
+        self.outputdirectory=outputdirectory
+        self.segmentduration=segmentduration
+        self.fps=fps
+        self.writer=None
+        self.currentsegemntstart=0.0
+        self.framesize=None
+        os.makedirs(outputdirectory, exist_ok=True)
+
+    def writeframes(self,frame):
+        currenttime=time.time()
+
+        #initialize segment if not already started or rotate segment if the segment time is reacheed
+        if self.writer is None or (currenttime-self.currentsegemntstart>=self.segmentduration):
+            self._rotatesegment(frame,currenttime)
+
+        if self.writer is not None:
+            self.writer.write(frame)
+
+    def _rotatesegment(self,frame,currenttime):
+        if self.writer is not None:
+            self.writer.release()
+
+        height,width,_=frame.shape               #set video height and width same as labelled video height and width
+        timestamp=datetime.datetime.now().strftime("%Y%m%d_%H%M%S")         #set timestamp in the video recording
+        archivepath=os.path.join(self.outputdirectory, f"archive_{timestamp}.mp4")
+
+        fourcc=cv2.VideoWriter_fourcc(*'mp4v')          #fourcc is an indentifier which tells the system which compression algorithm to apply            
+        self.writer=cv2.VideoWriter(archivepath, fourcc, 15.0, (width,height))    #declaring parameters of videowriter- where to save, how to save etc
+        self.currentsegemntstart=currenttime
+        print("New Recording Segment Initialized [NVR]")
+
+    def release(self):
+        if self.writer is not None:
+            self.writer.release()
+            self.writer=None
+
+recorder=ContinuousRecorder()
+
 #Producer Thread: Pulls frames from the camera and places them onto the queue
 def streamreaderthread():
     global rawframequeue
@@ -72,6 +112,7 @@ def streamreaderthread():
             continue
 
         success,frame=capture.read()            #if camera feed is available: read the frame
+        
         if not success:
             print("Dropped Frame. Re-establishing the stream")
             capture.release()
@@ -79,6 +120,7 @@ def streamreaderthread():
             capture=cv2.VideoCapture(cameraurl)
             continue
 
+        recorder.writeframes(frame)   #calling the recording class for recording raw footage to NVR
         
         if rawframequeue.full():        #when the new frame is grabbed, but the queue is full
             try:
@@ -154,7 +196,7 @@ def inferenceworkerthread():
             continue
 
         isoccluded,contrastratio,sharpnessratio=occlusiondetector.update(frame)
-        print(f"Contrast Ratio: {contrastratio}, \t Sharpness Ratio: {sharpnessratio}")
+        #print(f"Contrast Ratio: {contrastratio}, \t Sharpness Ratio: {sharpnessratio}")
 
         if occlusiondetector.iscalibrated:
             if isoccluded:
