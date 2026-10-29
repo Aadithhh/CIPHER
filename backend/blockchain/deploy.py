@@ -1,8 +1,8 @@
 from web3 import Web3
 
 # 1. Credentials & Configuration
-AMOY_RPC = "https://polygon-amoy.g.alchemy.com/v2/alch_oYYedu_I8ebci4F6IJEfT"
-PRIVATE_KEY = "a615287128980b97f0d8bc57ca28aaa5ada0805ae110aa0aa59a2f3d53092f75"
+AMOY_RPC = os.getenv("AMOY_RPC")
+PRIVATE_KEY = os.getenv("PRIVATE_KEY")
 
 # 2. Contract ABI & Bytecode
 ABI = [
