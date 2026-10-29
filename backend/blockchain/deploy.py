@@ -1,5 +1,7 @@
+import os
 from web3 import Web3
-
+from dotenv import load_dotenv
+load_dotenv()
 # 1. Credentials & Configuration
 AMOY_RPC = os.getenv("AMOY_RPC")
 PRIVATE_KEY = os.getenv("PRIVATE_KEY")
